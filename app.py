@@ -106,7 +106,9 @@ if uploaded_file:
                     append_receipt(fields, scanned_at)
                     st.success("✅ Saved to Google Sheets!")
                 except Exception as e:
+                    import traceback
                     st.error(f"Failed to save: {e}")
+                    st.code(traceback.format_exc())
 
         # --- Downloads ---
         st.subheader("⬇️ Export")
