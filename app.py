@@ -1,7 +1,9 @@
 import streamlit as st
 import pandas as pd
 import json
+from datetime import datetime
 from extractor import process_invoice
+from sheets import append_receipt
 
 st.set_page_config(
     page_title="Walmart Receipt Parser",
@@ -16,7 +18,7 @@ with st.sidebar:
     st.header("About")
     st.info("Parses Walmart receipts into structured data using GPT-4o Vision.")
     st.markdown("**Supported formats:** JPG, PNG, PDF")
-    st.markdown("**Built with:** OpenAI · Streamlit")
+    st.markdown("**Built with:** OpenAI · Streamlit · Google Sheets")
 
 uploaded_file = st.file_uploader(
     "Upload Walmart receipt",
@@ -42,7 +44,7 @@ if uploaded_file:
                 raw_text, fields = process_invoice(file_bytes, uploaded_file.name)
                 st.success("Done!")
             except Exception as e:
-                st.error(f"Something went wrong: {e}")
+                st.error(f"Extraction failed: {e}")
                 st.stop()
 
         # --- Store Info ---
@@ -73,7 +75,6 @@ if uploaded_file:
 
         if items:
             df = pd.DataFrame(items)
-            # Ensure consistent columns
             for col in ["name", "quantity", "unit_price", "total", "taxable"]:
                 if col not in df.columns:
                     df[col] = None
@@ -82,6 +83,7 @@ if uploaded_file:
             st.dataframe(df, use_container_width=True)
         else:
             st.warning("No items detected.")
+            df = pd.DataFrame()
 
         # --- Payment Summary ---
         st.subheader("💳 Payment Summary")
@@ -95,11 +97,22 @@ if uploaded_file:
         p5.metric("Amount Paid", fields.get("amount_paid") or "—")
         p6.metric("Change Due", fields.get("change_due") or "—")
 
+        # --- Save to Google Sheets ---
+        st.subheader("📊 Google Sheets")
+        if st.button("💾 Save to Google Sheets"):
+            with st.spinner("Saving..."):
+                try:
+                    scanned_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+                    append_receipt(fields, scanned_at)
+                    st.success("✅ Saved to Google Sheets!")
+                except Exception as e:
+                    st.error(f"Failed to save: {e}")
+
         # --- Downloads ---
         st.subheader("⬇️ Export")
         dl1, dl2 = st.columns(2)
         with dl1:
-            if items:
+            if not df.empty:
                 st.download_button(
                     "Download Items CSV",
                     df.to_csv(index=False),
@@ -114,7 +127,6 @@ if uploaded_file:
                 mime="application/json"
             )
 
-        # --- Raw output ---
         with st.expander("Raw OCR text"):
             st.text(raw_text)
 
